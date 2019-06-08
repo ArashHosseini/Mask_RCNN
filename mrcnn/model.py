@@ -19,11 +19,12 @@ import numpy as np
 import tensorflow as tf
 import keras
 import keras.backend as K
+import keras.backend.tensorflow_backend as ktf
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
 
-from mrcnn import utils
+from . import utils
 
 # Requires TensorFlow 1.3+ and Keras 2.0.8+.
 from distutils.version import LooseVersion
@@ -34,6 +35,7 @@ assert LooseVersion(keras.__version__) >= LooseVersion('2.0.8')
 ############################################################
 #  Utility Functions
 ############################################################
+
 
 def log(text, array=None):
     """Prints a text message. And, optionally, if a Numpy array is provided it
@@ -1835,6 +1837,14 @@ class MaskRCNN():
         self.model_dir = model_dir
         self.set_log_dir()
         self.keras_model = self.build(mode=mode, config=config)
+        ktf.set_session(self.get_session())
+        global graph
+        graph = tf.get_default_graph() 
+    def get_session(self, gpu_fraction=0.333):
+	    gpu_options = tf.GPUOptions(
+	        per_process_gpu_memory_fraction=gpu_fraction,
+	        allow_growth=True)
+	    return tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
 
     def build(self, mode, config):
         """Build Mask R-CNN architecture.
@@ -2106,7 +2116,6 @@ class MaskRCNN():
         except ImportError:
             # Keras before 2.2 used the 'topology' namespace.
             from keras.engine import topology as saving
-
         if exclude:
             by_name = True
 
@@ -2520,8 +2529,9 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, _, _, mrcnn_mask, _, _, _ =\
-            self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
+        with graph.as_default():
+             detections, _, _, mrcnn_mask, _, _, _ =\
+             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
         # Process detections
         results = []
         for i, image in enumerate(images):
